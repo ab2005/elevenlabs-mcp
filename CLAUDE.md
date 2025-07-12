@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./scripts/test.sh --fail-fast` - Stop on first failure
 - `./scripts/test.sh --no-coverage` - Skip coverage analysis
 - `python -m pytest tests/` - Direct pytest execution
+- `use python3`
 
 ### Development & Debugging
 - `./scripts/dev.sh` - Start MCP server in development mode with fastmcp inspector
@@ -30,17 +31,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Core Components
 
-**elevenlabs_mcp/server.py**: Main MCP server implementation using FastMCP framework. Contains 29 tools focused exclusively on ElevenLabs Conversational AI including:
+**elevenlabs_mcp/server.py**: Main MCP server implementation using FastMCP framework. Contains 36 tools focused exclusively on ElevenLabs Conversational AI including:
 
 **Agent Management:**
 - Create, update, delete agents
 - Get agent details and signed URLs
 - List agents with pagination
 
-**Tools API:**
-- Create server/client tools for agents
-- Get, update, delete tools
-- List tools with filtering
+**Tools API (2025 Implementation - DEPRECATION NOTICE):**
+- ⚠️ CRITICAL: Tools configuration changing July 2025
+- Create, get, update, delete workspace tools
+- List tools with filtering and pagination  
+- Get agents dependent on specific tools
+- HTTP-based implementation using /v1/convai/tools/* endpoints
+- Support for both server (webhook) and client tools
+- Migration required: prompt.tools → prompt.tool_ids + prompt.built_in_tools
 
 **Knowledge Base Management:**
 - Add documents from files, URLs, or text
