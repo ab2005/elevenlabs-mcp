@@ -11,5 +11,6 @@
 .cursorignore
 dist/
 elevenlabs_mcp.egg-info/
+elevenlabs_agents_mcp.egg-info/
 .coverage
 coverage.xml
