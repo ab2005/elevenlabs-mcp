@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 from elevenlabs.client import ElevenLabs
-from elevenlabs_mcp.model import McpVoice, McpModel, McpLanguage
+from elevenlabs_mcp.model import McpVoice, McpModel, McpLanguage, McpTool, McpKnowledgeBaseDocument, McpPhoneNumber, McpSecret
 from elevenlabs_mcp.utils import (
     make_error,
     make_output_path,
@@ -542,6 +542,115 @@ def add_knowledge_base_to_agent(
     )
 
 
+@mcp.tool(
+    description="""List all documents in an agent's knowledge base.
+
+    Args:
+        agent_id: The ID of the agent whose knowledge base to list
+    """
+)
+def list_knowledge_base_documents(agent_id: str) -> TextContent:
+    response = client.conversational_ai.knowledge_base.documents.list(agent_id=agent_id)
+
+    if not response.documents:
+        return TextContent(type="text", text="No knowledge base documents found.")
+
+    docs_list = []
+    for doc in response.documents:
+        docs_list.append(
+            f"Name: {doc.name}, ID: {doc.document_id}, Type: {doc.type}, Status: {doc.status}"
+        )
+
+    formatted_list = "\n".join(docs_list)
+    return TextContent(type="text", text=f"Knowledge Base Documents:\n{formatted_list}")
+
+
+@mcp.tool(
+    description="""Get details of a specific knowledge base document.
+
+    Args:
+        agent_id: The ID of the agent
+        document_id: The ID of the document to retrieve
+    """
+)
+def get_knowledge_base_document(agent_id: str, document_id: str) -> TextContent:
+    response = client.conversational_ai.knowledge_base.documents.get(
+        agent_id=agent_id, document_id=document_id
+    )
+
+    metadata_info = f"Metadata: {response.metadata}" if response.metadata else "No metadata"
+    
+    return TextContent(
+        type="text",
+        text=f"Document Details: Name: {response.name}, ID: {response.document_id}, Type: {response.type}, Status: {response.status}, Created: {response.created_at}, {metadata_info}",
+    )
+
+
+@mcp.tool(
+    description="""Remove a document from an agent's knowledge base.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent
+        document_id: The ID of the document to delete
+    """
+)
+def delete_knowledge_base_document(agent_id: str, document_id: str) -> TextContent:
+    client.conversational_ai.knowledge_base.documents.delete(
+        agent_id=agent_id, document_id=document_id
+    )
+
+    return TextContent(
+        type="text",
+        text=f"Knowledge base document deleted successfully: Document ID: {document_id}",
+    )
+
+
+@mcp.tool(
+    description="""Trigger recomputation of the RAG (Retrieval-Augmented Generation) index for an agent's knowledge base.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent whose knowledge base index to recompute
+    """
+)
+def compute_rag_index(agent_id: str) -> TextContent:
+    response = client.conversational_ai.knowledge_base.compute_index(agent_id=agent_id)
+
+    estimated_time = getattr(response, 'estimated_time_seconds', 'Unknown')
+    
+    return TextContent(
+        type="text",
+        text=f"RAG index computation started for agent {agent_id}. Estimated time: {estimated_time} seconds",
+    )
+
+
+@mcp.tool(
+    description="""Get the full content of a knowledge base document.
+
+    Args:
+        agent_id: The ID of the agent
+        document_id: The ID of the document to retrieve content for
+    """
+)
+def get_document_content(agent_id: str, document_id: str) -> TextContent:
+    response = client.conversational_ai.knowledge_base.documents.get_content(
+        agent_id=agent_id, document_id=document_id
+    )
+
+    # Truncate very long content for readability
+    content = response.content if hasattr(response, 'content') else str(response)
+    if len(content) > 2000:
+        content = content[:2000] + "... [content truncated]"
+
+    return TextContent(
+        type="text",
+        text=f"Document Content for {document_id}:\n\n{content}",
+    )
+
+
 @mcp.tool(description="List all available conversational AI agents")
 def list_agents() -> TextContent:
     """List all available conversational AI agents.
@@ -580,6 +689,76 @@ def get_agent(agent_id: str) -> TextContent:
     return TextContent(
         type="text",
         text=f"Agent Details: Name: {response.name}, Agent ID: {response.agent_id}, Voice Configuration: {voice_info}, Created At: {datetime.fromtimestamp(response.metadata.created_at_unix_secs).strftime('%Y-%m-%d %H:%M:%S')}",
+    )
+
+
+@mcp.tool(
+    description="""Update an existing agent's configuration.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent to update
+        name: New name for the agent (optional)
+        conversation_config: Updated conversation configuration (optional)
+    """
+)
+def update_agent(
+    agent_id: str,
+    name: str | None = None,
+    conversation_config: dict | None = None,
+) -> TextContent:
+    update_data = {}
+    if name is not None:
+        update_data["name"] = name
+    if conversation_config is not None:
+        update_data["conversation_config"] = conversation_config
+
+    if not update_data:
+        make_error("At least one field (name or conversation_config) must be provided for update")
+
+    response = client.conversational_ai.agents.update(
+        agent_id=agent_id,
+        **update_data
+    )
+
+    return TextContent(
+        type="text",
+        text=f"Agent updated successfully: Name: {response.name}, Agent ID: {response.agent_id}",
+    )
+
+
+@mcp.tool(
+    description="""Delete an agent permanently.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent to delete
+    """
+)
+def delete_agent(agent_id: str) -> TextContent:
+    client.conversational_ai.agents.delete(agent_id=agent_id)
+
+    return TextContent(
+        type="text",
+        text=f"Agent deleted successfully: Agent ID: {agent_id}",
+    )
+
+
+@mcp.tool(
+    description="""Generate a signed URL for secure client connections to an agent.
+
+    Args:
+        agent_id: The ID of the agent to generate signed URL for
+    """
+)
+def get_signed_url(agent_id: str) -> TextContent:
+    response = client.conversational_ai.agents.get_signed_url(agent_id=agent_id)
+
+    return TextContent(
+        type="text",
+        text=f"Signed URL: {response.signed_url} (expires at: {response.expires_at})",
     )
 
 
@@ -706,6 +885,204 @@ Call Successful: {conv.call_successful}"""
         make_error(f"Failed to list conversations: {str(e)}")
         # This line is unreachable but satisfies type checker
         return TextContent(type="text", text="")
+
+
+@mcp.tool(
+    description="""Send feedback for a completed conversation.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        conversation_id: The ID of the conversation to provide feedback for
+        rating: Rating score (1-5)
+        feedback_text: Detailed feedback text (optional)
+        categories: List of feedback categories (optional)
+    """
+)
+def send_conversation_feedback(
+    conversation_id: str,
+    rating: int,
+    feedback_text: str | None = None,
+    categories: list[str] | None = None,
+) -> TextContent:
+    if rating < 1 or rating > 5:
+        make_error("Rating must be between 1 and 5")
+
+    feedback_data = {"rating": rating}
+    if feedback_text is not None:
+        feedback_data["feedback_text"] = feedback_text
+    if categories is not None:
+        feedback_data["categories"] = categories
+
+    client.conversational_ai.conversations.feedback(
+        conversation_id=conversation_id,
+        **feedback_data
+    )
+
+    return TextContent(
+        type="text",
+        text=f"Feedback submitted successfully for conversation {conversation_id} with rating {rating}",
+    )
+
+
+# =============================================================================
+# TOOLS API
+# =============================================================================
+
+@mcp.tool(
+    description="""Create a new tool for agents to use.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        tool_type: Type of tool ("server" or "client")
+        name: Name of the tool
+        description: Description of what the tool does
+        server_tool: Server tool configuration (required if tool_type is "server")
+        client_tool: Client tool configuration (required if tool_type is "client")
+    """
+)
+def create_tool(
+    tool_type: str,
+    name: str,
+    description: str,
+    server_tool: dict | None = None,
+    client_tool: dict | None = None,
+) -> TextContent:
+    if tool_type not in ["server", "client"]:
+        make_error("tool_type must be either 'server' or 'client'")
+
+    if tool_type == "server" and server_tool is None:
+        make_error("server_tool configuration is required for server tools")
+    
+    if tool_type == "client" and client_tool is None:
+        make_error("client_tool configuration is required for client tools")
+
+    tool_data = {
+        "type": tool_type,
+        "name": name,
+        "description": description,
+    }
+
+    if server_tool is not None:
+        tool_data["server_tool"] = server_tool
+    if client_tool is not None:
+        tool_data["client_tool"] = client_tool
+
+    response = client.conversational_ai.tools.create(**tool_data)
+
+    return TextContent(
+        type="text",
+        text=f"Tool created successfully: Name: {name}, Tool ID: {response.tool_id}, Type: {tool_type}",
+    )
+
+
+@mcp.tool(
+    description="""Get details of a specific tool.
+
+    Args:
+        tool_id: The ID of the tool to retrieve
+    """
+)
+def get_tool(tool_id: str) -> TextContent:
+    response = client.conversational_ai.tools.get(tool_id=tool_id)
+
+    return TextContent(
+        type="text",
+        text=f"Tool Details: Name: {response.name}, Tool ID: {response.tool_id}, Type: {response.type}, Description: {response.description}",
+    )
+
+
+@mcp.tool(
+    description="""Update an existing tool.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        tool_id: The ID of the tool to update
+        name: New name for the tool (optional)
+        description: New description for the tool (optional)
+        server_tool: Updated server tool configuration (optional)
+        client_tool: Updated client tool configuration (optional)
+    """
+)
+def update_tool(
+    tool_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    server_tool: dict | None = None,
+    client_tool: dict | None = None,
+) -> TextContent:
+    update_data = {}
+    if name is not None:
+        update_data["name"] = name
+    if description is not None:
+        update_data["description"] = description
+    if server_tool is not None:
+        update_data["server_tool"] = server_tool
+    if client_tool is not None:
+        update_data["client_tool"] = client_tool
+
+    if not update_data:
+        make_error("At least one field must be provided for update")
+
+    response = client.conversational_ai.tools.update(tool_id=tool_id, **update_data)
+
+    return TextContent(
+        type="text",
+        text=f"Tool updated successfully: Name: {response.name}, Tool ID: {response.tool_id}",
+    )
+
+
+@mcp.tool(
+    description="""Delete a tool permanently.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        tool_id: The ID of the tool to delete
+    """
+)
+def delete_tool(tool_id: str) -> TextContent:
+    client.conversational_ai.tools.delete(tool_id=tool_id)
+
+    return TextContent(
+        type="text",
+        text=f"Tool deleted successfully: Tool ID: {tool_id}",
+    )
+
+
+@mcp.tool(
+    description="""List all tools in your workspace.
+
+    Args:
+        tool_type: Filter by tool type ("server" or "client") (optional)
+        page: Page number for pagination (optional)
+        page_size: Number of tools per page (optional)
+    """
+)
+def list_tools(
+    tool_type: str | None = None,
+    page: int = 0,
+    page_size: int = 20,
+) -> TextContent:
+    params = {"page": page, "page_size": page_size}
+    if tool_type is not None:
+        if tool_type not in ["server", "client"]:
+            make_error("tool_type must be either 'server' or 'client'")
+        params["type"] = tool_type
+
+    response = client.conversational_ai.tools.list(**params)
+
+    if not response.tools:
+        return TextContent(type="text", text="No tools found.")
+
+    tools_list = []
+    for tool in response.tools:
+        tools_list.append(f"Name: {tool.name}, ID: {tool.tool_id}, Type: {tool.type}")
+
+    formatted_list = "\n".join(tools_list)
+    return TextContent(type="text", text=f"Tools:\n{formatted_list}")
 
 
 @mcp.tool(
@@ -974,11 +1351,314 @@ def list_phone_numbers() -> TextContent:
     return TextContent(type="text", text=f"Phone Numbers:\n\n{formatted_info}")
 
 
+@mcp.tool(
+    description="""Create a new phone number and assign it to an agent.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent to assign the phone number to
+        area_code: Preferred area code for the phone number
+        country: Country code (e.g., "US", "CA", "GB")
+        capabilities: Phone capabilities configuration (optional)
+        webhook_url: Webhook URL for phone events (optional)
+    """
+)
+def create_phone_number(
+    agent_id: str,
+    area_code: str,
+    country: str = "US",
+    capabilities: dict | None = None,
+    webhook_url: str | None = None,
+) -> TextContent:
+    phone_data = {
+        "agent_id": agent_id,
+        "area_code": area_code,
+        "country": country,
+    }
+    
+    if capabilities is not None:
+        phone_data["capabilities"] = capabilities
+    if webhook_url is not None:
+        phone_data["webhook_url"] = webhook_url
+
+    response = client.conversational_ai.phone_numbers.create(**phone_data)
+
+    return TextContent(
+        type="text",
+        text=f"Phone number created successfully: {response.phone_number}, ID: {response.phone_number_id}, Agent: {response.agent_id}",
+    )
+
+
+@mcp.tool(
+    description="""Get details of a specific phone number.
+
+    Args:
+        phone_number_id: The ID of the phone number to retrieve
+    """
+)
+def get_phone_number(phone_number_id: str) -> TextContent:
+    response = client.conversational_ai.phone_numbers.get(phone_number_id=phone_number_id)
+
+    assigned_agent = "None"
+    if response.assigned_agent:
+        assigned_agent = f"{response.assigned_agent.agent_name} (ID: {response.assigned_agent.agent_id})"
+
+    return TextContent(
+        type="text",
+        text=f"Phone Number Details: Number: {response.phone_number}, ID: {response.phone_number_id}, Provider: {response.provider}, Status: {response.status}, Assigned Agent: {assigned_agent}",
+    )
+
+
+@mcp.tool(
+    description="""Update phone number configuration.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        phone_number_id: The ID of the phone number to update
+        agent_id: New agent ID to assign (optional)
+        webhook_url: New webhook URL (optional)
+        greeting_message: Custom greeting message (optional)
+    """
+)
+def update_phone_number(
+    phone_number_id: str,
+    agent_id: str | None = None,
+    webhook_url: str | None = None,
+    greeting_message: str | None = None,
+) -> TextContent:
+    update_data = {}
+    if agent_id is not None:
+        update_data["agent_id"] = agent_id
+    if webhook_url is not None:
+        update_data["webhook_url"] = webhook_url
+    if greeting_message is not None:
+        update_data["greeting_message"] = greeting_message
+
+    if not update_data:
+        make_error("At least one field must be provided for update")
+
+    response = client.conversational_ai.phone_numbers.update(
+        phone_number_id=phone_number_id, **update_data
+    )
+
+    return TextContent(
+        type="text",
+        text=f"Phone number updated successfully: {response.phone_number}, ID: {response.phone_number_id}",
+    )
+
+
+@mcp.tool(
+    description="""Release/delete a phone number.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        phone_number_id: The ID of the phone number to delete
+    """
+)
+def delete_phone_number(phone_number_id: str) -> TextContent:
+    client.conversational_ai.phone_numbers.delete(phone_number_id=phone_number_id)
+
+    return TextContent(
+        type="text",
+        text=f"Phone number deleted/released successfully: Phone Number ID: {phone_number_id}",
+    )
+
+
+# =============================================================================
+# WIDGET API
+# =============================================================================
+
+@mcp.tool(
+    description="""Get widget configuration for embedding an agent on websites.
+
+    Args:
+        agent_id: The ID of the agent to get widget configuration for
+    """
+)
+def get_widget(agent_id: str) -> TextContent:
+    response = client.conversational_ai.widgets.get(agent_id=agent_id)
+
+    config_info = []
+    if response.config:
+        config = response.config
+        config_info.extend([
+            f"Position: {getattr(config, 'position', 'N/A')}",
+            f"Theme: {getattr(config, 'theme', 'N/A')}",
+            f"Launcher Text: {getattr(config, 'launcher_text', 'N/A')}",
+        ])
+        if hasattr(config, 'avatar_url') and config.avatar_url:
+            config_info.append(f"Avatar URL: {config.avatar_url}")
+
+    config_text = ", ".join(config_info) if config_info else "Default configuration"
+
+    return TextContent(
+        type="text",
+        text=f"Widget Configuration: Widget ID: {response.widget_id}, Agent ID: {response.agent_id}, Config: {config_text}, Embed Code: {response.embed_code}",
+    )
+
+
+@mcp.tool(
+    description="""Upload a custom avatar for an agent's widget.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        agent_id: The ID of the agent to upload avatar for
+        file_path: Path to the image file (PNG, JPG, GIF)
+    """
+)
+def create_widget_avatar(agent_id: str, file_path: str) -> TextContent:
+    file_path_obj = handle_input_file(file_path, audio_content_check=False)
+    
+    with file_path_obj.open("rb") as f:
+        response = client.conversational_ai.widgets.upload_avatar(
+            agent_id=agent_id,
+            file=f
+        )
+
+    return TextContent(
+        type="text",
+        text=f"Widget avatar uploaded successfully for agent {agent_id}. Avatar URL: {getattr(response, 'avatar_url', 'uploaded')}",
+    )
+
+
 @mcp.tool(description="Play an audio file. Supports WAV and MP3 formats.")
 def play_audio(input_file_path: str) -> TextContent:
     file_path = handle_input_file(input_file_path)
     play(open(file_path, "rb").read(), use_ffmpeg=False)
     return TextContent(type="text", text=f"Successfully played audio file: {file_path}")
+
+
+# =============================================================================
+# WORKSPACE API
+# =============================================================================
+
+@mcp.tool(
+    description="""Get workspace settings and configuration.
+
+    Returns:
+        TextContent containing workspace settings information
+    """
+)
+def get_workspace_settings() -> TextContent:
+    response = client.conversational_ai.workspace.settings.get()
+
+    settings_info = []
+    if response.settings:
+        settings = response.settings
+        settings_info.extend([
+            f"Data Retention Days: {getattr(settings, 'data_retention_days', 'N/A')}",
+            f"GDPR Compliant: {getattr(settings, 'gdpr_compliant', 'N/A')}",
+            f"EU Data Residency: {getattr(settings, 'eu_data_residency', 'N/A')}",
+        ])
+        
+        if hasattr(settings, 'allowed_llm_providers') and settings.allowed_llm_providers:
+            providers = ", ".join(settings.allowed_llm_providers)
+            settings_info.append(f"Allowed LLM Providers: {providers}")
+
+    settings_text = "\n".join(settings_info) if settings_info else "No settings available"
+
+    return TextContent(
+        type="text",
+        text=f"Workspace Settings:\nWorkspace ID: {response.workspace_id}\nName: {response.name}\n\nSettings:\n{settings_text}",
+    )
+
+
+@mcp.tool(
+    description="""Update workspace settings.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        settings: Dictionary of settings to update
+    """
+)
+def update_workspace_settings(settings: dict) -> TextContent:
+    if not settings:
+        make_error("Settings dictionary is required")
+
+    response = client.conversational_ai.workspace.settings.update(settings=settings)
+
+    return TextContent(
+        type="text",
+        text=f"Workspace settings updated successfully for workspace: {response.workspace_id}",
+    )
+
+
+@mcp.tool(
+    description="""List all stored secrets in the workspace (returns secret names only, not values).
+
+    Returns:
+        TextContent containing list of secret names and metadata
+    """
+)
+def list_secrets() -> TextContent:
+    response = client.conversational_ai.workspace.secrets.list()
+
+    if not response.secrets:
+        return TextContent(type="text", text="No secrets found in workspace.")
+
+    secrets_list = []
+    for secret in response.secrets:
+        last_used = getattr(secret, 'last_used', 'Never')
+        secrets_list.append(
+            f"Name: {secret.name}, ID: {secret.secret_id}, Created: {secret.created_at}, Last Used: {last_used}"
+        )
+
+    formatted_list = "\n".join(secrets_list)
+    return TextContent(type="text", text=f"Workspace Secrets:\n{formatted_list}")
+
+
+@mcp.tool(
+    description="""Create a new secret in the workspace.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        name: Name of the secret (e.g., "OPENAI_API_KEY")
+        value: The secret value to store
+        description: Description of the secret (optional)
+    """
+)
+def create_secret(
+    name: str,
+    value: str,
+    description: str | None = None,
+) -> TextContent:
+    secret_data = {
+        "name": name,
+        "value": value,
+    }
+    if description is not None:
+        secret_data["description"] = description
+
+    response = client.conversational_ai.workspace.secrets.create(**secret_data)
+
+    return TextContent(
+        type="text",
+        text=f"Secret created successfully: Name: {name}, Secret ID: {response.secret_id}",
+    )
+
+
+@mcp.tool(
+    description="""Delete a stored secret from the workspace.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        secret_id: The ID of the secret to delete
+    """
+)
+def delete_secret(secret_id: str) -> TextContent:
+    client.conversational_ai.workspace.secrets.delete(secret_id=secret_id)
+
+    return TextContent(
+        type="text",
+        text=f"Secret deleted successfully: Secret ID: {secret_id}",
+    )
 
 
 def main():
