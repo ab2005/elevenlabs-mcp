@@ -4,7 +4,7 @@
 
   [![Discord Community](https://img.shields.io/badge/discord-@elevenlabs-000000.svg?style=for-the-badge&logo=discord&labelColor=000)](https://discord.gg/elevenlabs)
   [![Twitter](https://img.shields.io/badge/Twitter-@elevenlabsio-000000.svg?style=for-the-badge&logo=twitter&labelColor=000)](https://x.com/ElevenLabsDevs)
-  [![PyPI](https://img.shields.io/badge/PyPI-elevenlabs--mcp-000000.svg?style=for-the-badge&logo=pypi&labelColor=000)](https://pypi.org/project/elevenlabs-mcp)
+  [![PyPI](https://img.shields.io/badge/PyPI-elevenlabs--agents--mcp-000000.svg?style=for-the-badge&logo=pypi&labelColor=000)](https://pypi.org/project/elevenlabs-agents-mcp)
   [![Tests](https://img.shields.io/badge/tests-passing-000000.svg?style=for-the-badge&logo=github&labelColor=000)](https://github.com/elevenlabs/elevenlabs-mcp-server/actions/workflows/test.yml)
 
 </div>
@@ -25,7 +25,7 @@
   "mcpServers": {
     "ElevenLabs": {
       "command": "uvx",
-      "args": ["elevenlabs-mcp"],
+      "args": ["elevenlabs-agents-mcp"],
       "env": {
         "ELEVENLABS_API_KEY": "<insert-your-api-key-here>"
       }
@@ -40,7 +40,7 @@ If you're using Windows, you will have to enable "Developer Mode" in Claude Desk
 ## Other MCP clients
 
 For other clients like Cursor and Windsurf, run:
-1. `pip install elevenlabs-mcp`
+1. `pip install elevenlabs-agents-mcp`
 2. `python -m elevenlabs_mcp --api-key={{PUT_YOUR_API_KEY_HERE}} --print` to get the configuration. Paste it into appropriate configuration directory specified by your MCP client.
 
 That's it. Your MCP client can now interact with ElevenLabs Conversational AI through these tools:
@@ -111,8 +111,8 @@ If you want to contribute or run from source:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/elevenlabs/elevenlabs-mcp
-cd elevenlabs-mcp
+git clone https://github.com/elevenlabs/elevenlabs-agents-mcp
+cd elevenlabs-agents-mcp
 ```
 
 2. Create a virtual environment and install dependencies [using uv](https://github.com/astral-sh/uv):

@@ -103,7 +103,7 @@ All tools that make API calls include "⚠️ COST WARNING" in descriptions. Too
 - Scripts: `scripts/` (test, dev, build, setup)
 - Tests: `tests/` with pytest configuration
 - Docker support via `Dockerfile`
-- Distribution via PyPI as `elevenlabs-mcp`
+- Distribution via PyPI as `elevenlabs-agents-mcp`
 
 ## Project Goals
 - Provide a comprehensive MCP server with complete conversational AI tool coverage for ElevenLabs agents API

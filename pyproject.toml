@@ -1,7 +1,7 @@
 [project]
-name = "elevenlabs-mcp"
+name = "elevenlabs-agents-mcp"
 version = "0.4.0"
-description = "ElevenLabs MCP Server"
+description = "ElevenLabs Conversational AI Agents MCP Server"
 authors = [
     { name = "Jacek Duszenko", email = "jacek@elevenlabs.io" },
     { name = "Paul Asjes", email = "paul.asjes@elevenlabs.io" },
@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.scripts]
-elevenlabs-mcp = "elevenlabs_mcp.server:main"
+elevenlabs-agents-mcp = "elevenlabs_mcp.server:main"
 
 [project.optional-dependencies]
 dev = [

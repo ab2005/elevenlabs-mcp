@@ -13,4 +13,4 @@ RUN pip install --upgrade pip \
     && pip install --no-cache-dir .
 
 # Command to run the MCP server
-CMD ["elevenlabs-mcp"]
+CMD ["elevenlabs-agents-mcp"]
