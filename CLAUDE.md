@@ -30,25 +30,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Core Components
 
-**elevenlabs_mcp/server.py**: Main MCP server implementation using FastMCP framework. Contains 47 tools for complete ElevenLabs API integration including:
-
-**Core Audio Tools:**
-- Text-to-speech with voice customization
-- Speech-to-text with diarization
-- Voice cloning and management
-- Audio processing (isolation, effects, speech-to-speech)
-- Sound effects generation
+**elevenlabs_mcp/server.py**: Main MCP server implementation using FastMCP framework. Contains 29 tools focused exclusively on ElevenLabs Conversational AI including:
 
 **Agent Management:**
 - Create, update, delete agents
 - Get agent details and signed URLs
 - List agents with pagination
-
-**Conversation Management:**
-- Get conversations with transcripts
-- List conversations with filtering
-- Send conversation feedback
-- Outbound calling via Twilio/SIP
 
 **Tools API:**
 - Create server/client tools for agents
@@ -78,7 +65,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **elevenlabs_mcp/utils.py**: Utility functions for file handling, path management, error handling, and large text processing.
 
 **elevenlabs_mcp/model.py**: Pydantic models for structured data including:
-- McpVoice, McpModel, McpLanguage (core voice/model data)
 - McpTool (tool definitions and metadata)
 - McpKnowledgeBaseDocument (knowledge base document info)
 - McpPhoneNumber (phone number configurations)
@@ -102,23 +88,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### API Coverage
 The implementation provides complete coverage of ElevenLabs Conversational AI API including:
-- Agents API (create, read, update, delete, signed URLs)
-- Conversations API (list, get, feedback)
-- Tools API (server/client tools management)
-- Knowledge Base API (documents, RAG indexing)
-- Phone Numbers API (Twilio/SIP integration)
-- Widget API (website embedding)
-- Workspace API (settings, secrets management)
+- **Agents API** (create, read, update, delete, signed URLs)
+- **Tools API** (server/client tools management)
+- **Knowledge Base API** (documents, RAG indexing)
+- **Phone Numbers API** (Twilio/SIP integration)
+- **Widget API** (website embedding, custom avatars)
+- **Workspace API** (settings, secrets management)
 
 ### Cost Awareness
 All tools that make API calls include "⚠️ COST WARNING" in descriptions. Tools without warnings only read existing data and are free to use.
 
 ### File Structure
-- Main package: `elevenlabs_mcp/` (~1600 lines with 47 tools)
+- Main package: `elevenlabs_mcp/` (~1200 lines with 29 conversational AI tools)
 - Scripts: `scripts/` (test, dev, build, setup)
 - Tests: `tests/` with pytest configuration
 - Docker support via `Dockerfile`
 - Distribution via PyPI as `elevenlabs-mcp`
 
 ## Project Goals
-- The goal of this project is to extend mcp server with full set of tools to use elevenlabs agents api
+- Provide a comprehensive MCP server with complete conversational AI tool coverage for ElevenLabs agents API
+- Focus exclusively on conversational AI functionality (agents, knowledge bases, tools, phone integration, widgets, workspace management)
+- Streamlined implementation removing non-conversational AI features for a specialized, efficient experience
