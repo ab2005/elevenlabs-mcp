@@ -11,7 +11,7 @@
 
 
 <p align="center">
-  Official ElevenLabs <a href="https://github.com/modelcontextprotocol">Model Context Protocol (MCP)</a> server that enables interaction with powerful Text to Speech and audio processing APIs. This server allows MCP clients like <a href="https://www.anthropic.com/claude">Claude Desktop</a>, <a href="https://www.cursor.so">Cursor</a>, <a href="https://codeium.com/windsurf">Windsurf</a>, <a href="https://github.com/openai/openai-agents-python">OpenAI Agents</a> and others to generate speech, clone voices, transcribe audio, and more.
+  Official ElevenLabs <a href="https://github.com/modelcontextprotocol">Model Context Protocol (MCP)</a> server focused on Conversational AI. This specialized server enables MCP clients like <a href="https://www.anthropic.com/claude">Claude Desktop</a>, <a href="https://www.cursor.so">Cursor</a>, <a href="https://codeium.com/windsurf">Windsurf</a>, <a href="https://github.com/openai/openai-agents-python">OpenAI Agents</a> and others to create and manage AI agents, knowledge bases, phone integrations, and more.
 </p>
 
 ## Quickstart with Claude Desktop
@@ -43,19 +43,62 @@ For other clients like Cursor and Windsurf, run:
 1. `pip install elevenlabs-mcp`
 2. `python -m elevenlabs_mcp --api-key={{PUT_YOUR_API_KEY_HERE}} --print` to get the configuration. Paste it into appropriate configuration directory specified by your MCP client.
 
-That's it. Your MCP client can now interact with ElevenLabs through these tools:
+That's it. Your MCP client can now interact with ElevenLabs Conversational AI through these tools:
+
+## Available Tools
+
+This MCP server provides 29 specialized tools for ElevenLabs Conversational AI:
+
+### Agent Management
+- `create_agent` - Create conversational AI agents with custom configurations
+- `update_agent` - Update agent settings and configurations
+- `delete_agent` - Delete an agent
+- `get_agent` - Get agent details
+- `list_agents` - List all available conversational AI agents
+- `get_signed_url` - Get a signed URL for agent interactions
+
+### Knowledge Base Management
+- `add_knowledge_base_to_agent` - Add documents from files, URLs, or text
+- `list_knowledge_base_documents` - List documents in an agent's knowledge base
+- `get_knowledge_base_document` - Get document details
+- `delete_knowledge_base_document` - Remove documents from knowledge base
+- `get_knowledge_base_document_content` - Retrieve document content
+- `compute_knowledge_base_rag_index` - Optimize knowledge base for retrieval
+
+### Tools API
+- `create_server_tool` - Create server-side tools for agents
+- `create_client_tool` - Create client-side tools for agents
+- `get_tool` - Get tool details
+- `update_tool` - Update tool configurations
+- `delete_tool` - Remove tools
+- `list_tools` - List available tools
+
+### Phone Integration
+- `create_phone_number` - Set up phone numbers for agents
+- `get_phone_number` - Get phone number details
+- `update_phone_number` - Update phone configurations
+- `delete_phone_number` - Remove phone numbers
+- `list_phone_numbers` - List all phone numbers
+
+### Widget & Workspace
+- `get_widget_config` - Get widget configuration for website embedding
+- `upload_avatar` - Upload custom avatar for agents
+- `get_workspace` - Get workspace settings
+- `update_workspace` - Update workspace configuration
+- `list_secrets` - List workspace secrets
+- `create_secret` - Create new secrets (API keys, tokens)
 
 ## Example usage
 
-⚠️ Warning: ElevenLabs credits are needed to use these tools.
+⚠️ Warning: ElevenLabs API usage may incur costs. Only tools marked with cost warnings make API calls.
 
 Try asking Claude:
 
-- "Create an AI agent that speaks like a film noir detective and can answer questions about classic movies"
-- "Generate three voice variations for a wise, ancient dragon character, then I will choose my favorite voice to add to my voice library"
-- "Convert this recording of my voice to sound like a medieval knight"
-- "Create a soundscape of a thunderstorm in a dense jungle with animals reacting to the weather"
-- "Turn this speech into text, identify different speakers, then convert it back using unique voices for each person"
+- "Create an AI agent that can help customers with technical support inquiries"
+- "Set up a knowledge base for my agent with product documentation and FAQs"
+- "Configure a phone number for my agent to handle inbound calls"
+- "Create a custom tool that lets my agent check order status in our database"
+- "Get the widget code to embed my agent on our company website"
 
 ## Optional features
 
