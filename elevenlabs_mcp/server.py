@@ -23,6 +23,18 @@ from elevenlabs_mcp.utils import (
     make_error,
     handle_input_file,
 )
+from elevenlabs_mcp.curl_tools import (
+    create_weather_tool,
+    create_webhook_tool,
+    create_rest_api_tool,
+    create_crm_webhook_tool,
+    create_notification_tool,
+    create_database_api_tool,
+    create_search_tool,
+    generate_curl_command,
+    validate_tool_config,
+    TOOL_TEMPLATES
+)
 from elevenlabs_mcp.convai import create_conversation_config, create_platform_settings
 from elevenlabs.types.knowledge_base_locator import KnowledgeBaseLocator
 
@@ -201,7 +213,7 @@ def add_knowledge_base_to_agent(
     """
 )
 def list_knowledge_base_documents(agent_id: str) -> TextContent:
-    response = client.conversational_ai.knowledge_base.documents.list(agent_id=agent_id)
+    response = client.conversational_ai.knowledge_base.list(agent_id=agent_id)
 
     if not response.documents:
         return TextContent(type="text", text="No knowledge base documents found.")
@@ -220,13 +232,12 @@ def list_knowledge_base_documents(agent_id: str) -> TextContent:
     description="""Get details of a specific knowledge base document.
 
     Args:
-        agent_id: The ID of the agent
         document_id: The ID of the document to retrieve
     """
 )
-def get_knowledge_base_document(agent_id: str, document_id: str) -> TextContent:
+def get_knowledge_base_document(document_id: str) -> TextContent:
     response = client.conversational_ai.knowledge_base.documents.get(
-        agent_id=agent_id, document_id=document_id
+        document_id=document_id
     )
 
     metadata_info = f"Metadata: {response.metadata}" if response.metadata else "No metadata"
@@ -238,18 +249,17 @@ def get_knowledge_base_document(agent_id: str, document_id: str) -> TextContent:
 
 
 @mcp.tool(
-    description="""Remove a document from an agent's knowledge base.
+    description="""Remove a document from a knowledge base.
 
     ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
 
     Args:
-        agent_id: The ID of the agent
         document_id: The ID of the document to delete
     """
 )
-def delete_knowledge_base_document(agent_id: str, document_id: str) -> TextContent:
+def delete_knowledge_base_document(document_id: str) -> TextContent:
     client.conversational_ai.knowledge_base.documents.delete(
-        agent_id=agent_id, document_id=document_id
+        document_id=document_id
     )
 
     return TextContent(
@@ -259,22 +269,22 @@ def delete_knowledge_base_document(agent_id: str, document_id: str) -> TextConte
 
 
 @mcp.tool(
-    description="""Trigger recomputation of the RAG (Retrieval-Augmented Generation) index for an agent's knowledge base.
+    description="""Trigger recomputation of the RAG (Retrieval-Augmented Generation) index for a document.
 
     ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
 
     Args:
-        agent_id: The ID of the agent whose knowledge base index to recompute
+        document_id: The ID of the document to recompute RAG index for
     """
 )
-def compute_rag_index(agent_id: str) -> TextContent:
-    response = client.conversational_ai.knowledge_base.compute_index(agent_id=agent_id)
+def compute_rag_index(document_id: str) -> TextContent:
+    response = client.conversational_ai.knowledge_base.document.compute_rag_index(document_id=document_id)
 
     estimated_time = getattr(response, 'estimated_time_seconds', 'Unknown')
     
     return TextContent(
         type="text",
-        text=f"RAG index computation started for agent {agent_id}. Estimated time: {estimated_time} seconds",
+        text=f"RAG index computation started for document {document_id}. Estimated time: {estimated_time} seconds",
     )
 
 
@@ -282,13 +292,12 @@ def compute_rag_index(agent_id: str) -> TextContent:
     description="""Get the full content of a knowledge base document.
 
     Args:
-        agent_id: The ID of the agent
         document_id: The ID of the document to retrieve content for
     """
 )
-def get_document_content(agent_id: str, document_id: str) -> TextContent:
+def get_document_content(document_id: str) -> TextContent:
     response = client.conversational_ai.knowledge_base.documents.get_content(
-        agent_id=agent_id, document_id=document_id
+        document_id=document_id
     )
 
     # Truncate very long content for readability
@@ -398,18 +407,21 @@ def delete_agent(agent_id: str) -> TextContent:
 
 
 @mcp.tool(
-    description="""Generate a signed URL for secure client connections to an agent.
+    description="""Get widget embed information for an agent (equivalent to signed URL for web integration).
 
     Args:
-        agent_id: The ID of the agent to generate signed URL for
+        agent_id: The ID of the agent to get widget information for
     """
 )
 def get_signed_url(agent_id: str) -> TextContent:
-    response = client.conversational_ai.agents.get_signed_url(agent_id=agent_id)
+    response = client.conversational_ai.agents.widget.get(agent_id=agent_id)
 
+    # Generate embed information
+    embed_url = f"https://elevenlabs.io/convai-widget/{agent_id}"
+    
     return TextContent(
         type="text",
-        text=f"Signed URL: {response.signed_url} (expires at: {response.expires_at})",
+        text=f"Widget embed URL: {embed_url} (Agent ID: {response.agent_id}, Widget configured: {'Yes' if response.widget_config else 'No'})",
     )
 
 
@@ -419,8 +431,12 @@ def get_signed_url(agent_id: str) -> TextContent:
 
 
 # =============================================================================
-# TOOLS API
+# TOOLS API - UPDATED 2025 IMPLEMENTATION
 # =============================================================================
+# 
+# NOTE: The Tools API is available via HTTP endpoints but not directly through 
+# the conversational_ai client attributes. Using direct HTTP requests to the API.
+# Endpoints: /v1/convai/tools/* as documented in 2025 API updates.
 
 @mcp.tool(
     description="""Create a new tool for agents to use.
@@ -443,31 +459,56 @@ def create_tool(
     client_tool: dict | None = None,
 ) -> TextContent:
     if tool_type not in ["server", "client"]:
-        make_error("tool_type must be either 'server' or 'client'")
+        return make_error("tool_type must be either 'server' or 'client'")
 
     if tool_type == "server" and server_tool is None:
-        make_error("server_tool configuration is required for server tools")
+        return make_error("server_tool configuration is required for server tools")
     
     if tool_type == "client" and client_tool is None:
-        make_error("client_tool configuration is required for client tools")
+        return make_error("client_tool configuration is required for client tools")
 
-    tool_data = {
-        "type": tool_type,
+    # For server tools, extract webhook config from tool_config wrapper if present
+    if server_tool and "tool_config" in server_tool:
+        server_tool = server_tool["tool_config"]
+
+    # Map tool_type to the correct API type
+    api_tool_type = "webhook" if tool_type == "server" else "client"
+    
+    # Build the tool data according to the API structure
+    tool_config = {
+        "type": api_tool_type,
         "name": name,
         "description": description,
     }
 
-    if server_tool is not None:
-        tool_data["server_tool"] = server_tool
-    if client_tool is not None:
-        tool_data["client_tool"] = client_tool
+    if tool_type == "server" and server_tool:
+        # Server tools need a webhook configuration
+        if "webhook" in server_tool:
+            tool_config["webhook"] = server_tool["webhook"]
+        else:
+            # If no webhook key, assume the entire server_tool is the webhook config
+            tool_config["webhook"] = server_tool
+    elif tool_type == "client" and client_tool:
+        tool_config["client_tool"] = client_tool
+    
+    tool_data = {"tool_config": tool_config}
 
-    response = client.conversational_ai.tools.create(**tool_data)
-
-    return TextContent(
-        type="text",
-        text=f"Tool created successfully: Name: {name}, Tool ID: {response.tool_id}, Type: {tool_type}",
-    )
+    # Use HTTP request to tools API endpoint
+    try:
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_data
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        return TextContent(
+            type="text",
+            text=f"Tool created successfully: Name: {name}, Tool ID: {result.get('id')}, Type: {tool_type}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create tool: {str(e)}")
 
 
 @mcp.tool(
@@ -478,13 +519,26 @@ def create_tool(
     """
 )
 def get_tool(tool_id: str) -> TextContent:
-    response = client.conversational_ai.tools.get(tool_id=tool_id)
+    try:
+        response = custom_client.get(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}",
+            headers={"xi-api-key": api_key}
+        )
+        response.raise_for_status()
+        result = response.json()
 
-    return TextContent(
-        type="text",
-        text=f"Tool Details: Name: {response.name}, Tool ID: {response.tool_id}, Type: {response.type}, Description: {response.description}",
-    )
-
+        tool_config = result.get('tool_config', {})
+        name = tool_config.get('name', 'Unknown')
+        tool_type = tool_config.get('type', 'Unknown')
+        tool_id = result.get('id', 'Unknown')
+        description = tool_config.get('description', 'No description')
+        
+        return TextContent(
+            type="text",
+            text=f"Tool Details: Name: {name}, Tool ID: {tool_id}, Type: {tool_type}, Description: {description}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to get tool: {str(e)}")
 
 @mcp.tool(
     description="""Update an existing tool.
@@ -506,26 +560,40 @@ def update_tool(
     server_tool: dict | None = None,
     client_tool: dict | None = None,
 ) -> TextContent:
-    update_data = {}
+    tool_config_updates = {}
     if name is not None:
-        update_data["name"] = name
+        tool_config_updates["name"] = name
     if description is not None:
-        update_data["description"] = description
+        tool_config_updates["description"] = description
     if server_tool is not None:
-        update_data["server_tool"] = server_tool
+        tool_config_updates["server_tool"] = server_tool
     if client_tool is not None:
-        update_data["client_tool"] = client_tool
+        tool_config_updates["client_tool"] = client_tool
 
-    if not update_data:
-        make_error("At least one field must be provided for update")
+    if not tool_config_updates:
+        return make_error("At least one field must be provided for update")
 
-    response = client.conversational_ai.tools.update(tool_id=tool_id, **update_data)
+    update_data = {"tool_config": tool_config_updates}
 
-    return TextContent(
-        type="text",
-        text=f"Tool updated successfully: Name: {response.name}, Tool ID: {response.tool_id}",
-    )
+    try:
+        response = custom_client.patch(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=update_data
+        )
+        response.raise_for_status()
+        result = response.json()
 
+        tool_config = result.get('tool_config', {})
+        name = tool_config.get('name', 'Unknown')
+        tool_id = result.get('id', 'Unknown')
+        
+        return TextContent(
+            type="text",
+            text=f"Tool updated successfully: Name: {name}, Tool ID: {tool_id}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to update tool: {str(e)}")
 
 @mcp.tool(
     description="""Delete a tool permanently.
@@ -537,14 +605,19 @@ def update_tool(
     """
 )
 def delete_tool(tool_id: str) -> TextContent:
-    client.conversational_ai.tools.delete(tool_id=tool_id)
+    try:
+        response = custom_client.delete(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}",
+            headers={"xi-api-key": api_key}
+        )
+        response.raise_for_status()
 
-    return TextContent(
-        type="text",
-        text=f"Tool deleted successfully: Tool ID: {tool_id}",
-    )
-
-
+        return TextContent(
+            type="text",
+            text=f"Tool deleted successfully: Tool ID: {tool_id}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to delete tool: {str(e)}")
 @mcp.tool(
     description="""List all tools in your workspace.
 
@@ -562,20 +635,133 @@ def list_tools(
     params = {"page": page, "page_size": page_size}
     if tool_type is not None:
         if tool_type not in ["server", "client"]:
-            make_error("tool_type must be either 'server' or 'client'")
+            return make_error("tool_type must be either 'server' or 'client'")
         params["type"] = tool_type
 
-    response = client.conversational_ai.tools.list(**params)
+    try:
+        response = custom_client.get(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key},
+            params=params
+        )
+        response.raise_for_status()
+        result = response.json()
 
-    if not response.tools:
-        return TextContent(type="text", text="No tools found.")
+        tools = result.get("tools", [])
+        if not tools:
+            return TextContent(type="text", text="No tools found.")
 
-    tools_list = []
-    for tool in response.tools:
-        tools_list.append(f"Name: {tool.name}, ID: {tool.tool_id}, Type: {tool.type}")
+        tools_list = []
+        for tool in tools:
+            tool_config = tool.get('tool_config', {})
+            name = tool_config.get('name', 'Unknown')
+            tool_type = tool_config.get('type', 'Unknown')
+            tool_id = tool.get('id', 'Unknown')
+            description = tool_config.get('description', '')[:100] + ('...' if len(tool_config.get('description', '')) > 100 else '')
+            
+            tools_list.append(f"Name: {name}, ID: {tool_id}, Type: {tool_type}, Description: {description}")
 
-    formatted_list = "\n".join(tools_list)
-    return TextContent(type="text", text=f"Tools:\n{formatted_list}")
+        formatted_list = "\n".join(tools_list)
+        return TextContent(type="text", text=f"Tools:\n{formatted_list}")
+    except Exception as e:
+        return make_error(f"Failed to list tools: {str(e)}")
+
+
+@mcp.tool(
+    description="""Get all agents that depend on a specific tool.
+
+    Args:
+        tool_id: The ID of the tool to check for dependencies
+    """
+)
+def get_tool_dependent_agents(tool_id: str) -> TextContent:
+    try:
+        response = custom_client.get(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}/dependent-agents",
+            headers={"xi-api-key": api_key}
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        agents = result.get("agents", [])
+        if not agents:
+            return TextContent(type="text", text=f"No agents depend on tool {tool_id}.")
+
+        agents_list = []
+        for agent in agents:
+            agents_list.append(f"Agent ID: {agent.get('agent_id')}, Name: {agent.get('name', 'Unknown')}")
+
+        formatted_list = "\n".join(agents_list)
+        return TextContent(type="text", text=f"Agents depending on tool {tool_id}:\n{formatted_list}")
+    except Exception as e:
+        return make_error(f"Failed to get dependent agents: {str(e)}")
+
+
+@mcp.tool(
+    description="""Get information about ElevenLabs Tools API deprecation and migration guidance.
+    
+    This tool provides critical information about the upcoming Tools API changes in July 2025
+    and guidance on how to migrate from the legacy prompt.tools format to the new format.
+    """
+)
+def get_tools_deprecation_info() -> TextContent:
+    deprecation_info = """
+🚨 CRITICAL: ElevenLabs Tools API Deprecation Timeline
+
+BREAKING CHANGES COMING:
+• July 14, 2025: Full backwards compatibility ends
+• July 15, 2025: GET endpoints stop returning 'tools' field
+• July 23, 2025: Legacy 'prompt.tools' field permanently removed
+
+MIGRATION REQUIRED:
+OLD FORMAT (being removed):
+{
+  "conversation_config": {
+    "agent": {
+      "prompt": {
+        "tools": [
+          {"type": "system", "name": "end_call"},
+          {"type": "client", "name": "custom_tool"}
+        ]
+      }
+    }
+  }
+}
+
+NEW FORMAT (required after July 15):
+{
+  "conversation_config": {
+    "agent": {
+      "prompt": {
+        "tool_ids": ["tool_123456789abcdef0"],
+        "built_in_tools": {
+          "end_call": {"name": "end_call", "type": "system"},
+          "language_detection": null,
+          "transfer_to_agent": null,
+          "transfer_to_number": null,
+          "skip_turn": null
+        }
+      }
+    }
+  }
+}
+
+MIGRATION STEPS:
+1. Use create_tool() to create workspace tools
+2. Get tool IDs from responses
+3. Update agent configs to use tool_ids instead of tools array
+4. Configure built_in_tools for system tools
+5. Test before July 14, 2025
+
+BENEFITS:
+• Tool reuse across multiple agents
+• Simplified tool management and audits
+• Cleaner agent configurations
+
+WARNING: Cannot mix prompt.tools and prompt.tool_ids in same request!
+"""
+    
+    return TextContent(type="text", text=deprecation_info)
 
 
 
@@ -665,7 +851,7 @@ def get_phone_number(phone_number_id: str) -> TextContent:
 
     return TextContent(
         type="text",
-        text=f"Phone Number Details: Number: {response.phone_number}, ID: {response.phone_number_id}, Provider: {response.provider}, Status: {response.status}, Assigned Agent: {assigned_agent}",
+        text=f"Phone Number Details: Number: {response.phone_number}, ID: {response.phone_number_id}, Provider: {response.provider}, Label: {response.label}, Assigned Agent: {assigned_agent}",
     )
 
 
@@ -910,6 +1096,362 @@ def delete_secret(secret_id: str) -> TextContent:
     return TextContent(
         type="text",
         text=f"Secret deleted successfully: Secret ID: {secret_id}",
+    )
+
+
+# =============================================================================
+# CURL-BASED TOOL CREATION UTILITIES
+# =============================================================================
+
+@mcp.tool(
+    description="""Create a weather integration tool using popular weather APIs.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        api_provider: Weather API provider ("open-meteo" - free, "openweathermap" - requires API key)
+        weather_api_key: API key for services that require authentication (required for openweathermap)
+    """
+)
+def create_weather_integration_tool(
+    api_provider: str = "open-meteo",
+    weather_api_key: str | None = None,
+) -> TextContent:
+    try:
+        # Create the weather tool configuration
+        tool_config = create_weather_tool(api_provider, weather_api_key)
+        
+        # Update tool_config to have correct type
+        tool_config["tool_config"]["type"] = "webhook"
+        
+        # Create the tool using ElevenLabs API
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_config
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        return TextContent(
+            type="text",
+            text=f"Weather tool created successfully: Tool ID: {result.get('id')}, Provider: {api_provider}, Name: get_weather",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create weather tool: {str(e)}")
+
+
+@mcp.tool(
+    description="""Create a custom webhook tool for integrating with external services.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        name: Tool name (snake_case recommended)
+        description: Clear description of what the tool does
+        webhook_url: Target webhook URL
+        method: HTTP method (GET, POST, PUT, DELETE)
+        auth_header: Authorization header template (e.g., "Bearer {api_key}")
+        custom_headers: Additional headers as JSON string (optional)
+        parameters_schema: Parameter schema as JSON string (optional)
+    """
+)
+def create_custom_webhook_tool(
+    name: str,
+    description: str,
+    webhook_url: str,
+    method: str = "POST",
+    auth_header: str | None = None,
+    custom_headers: str | None = None,
+    parameters_schema: str | None = None,
+) -> TextContent:
+    try:
+        import json
+        
+        # Parse optional JSON parameters
+        headers_dict = None
+        if custom_headers:
+            headers_dict = json.loads(custom_headers)
+        
+        params_dict = None
+        if parameters_schema:
+            params_dict = json.loads(parameters_schema)
+        
+        # Create the webhook tool configuration
+        tool_config = create_webhook_tool(
+            name=name,
+            description=description,
+            url=webhook_url,
+            method=method,
+            auth_header=auth_header,
+            custom_headers=headers_dict,
+            parameters=params_dict
+        )
+        
+        # Create the tool using ElevenLabs API
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_config
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        return TextContent(
+            type="text",
+            text=f"Webhook tool created successfully: Tool ID: {result.get('id')}, Name: {name}, URL: {webhook_url}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create webhook tool: {str(e)}")
+
+
+@mcp.tool(
+    description="""Create a REST API integration tool for external services.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        name: Tool name
+        description: Tool description
+        base_url: Base API URL
+        endpoint: API endpoint path (optional)
+        method: HTTP method (GET, POST, PUT, DELETE)
+        auth_type: Authentication type ("bearer", "api_key", "basic")
+        auth_token: Authentication token/key
+        path_params: Path parameters as JSON string (optional)
+        query_params: Query parameters as JSON string (optional)
+        body_params: Body parameters as JSON string (optional)
+    """
+)
+def create_api_integration_tool(
+    name: str,
+    description: str,
+    base_url: str,
+    endpoint: str = "",
+    method: str = "GET",
+    auth_type: str = "bearer",
+    auth_token: str | None = None,
+    path_params: str | None = None,
+    query_params: str | None = None,
+    body_params: str | None = None,
+) -> TextContent:
+    try:
+        import json
+        
+        # Parse optional JSON parameters
+        path_params_dict = json.loads(path_params) if path_params else None
+        query_params_dict = json.loads(query_params) if query_params else None
+        body_params_dict = json.loads(body_params) if body_params else None
+        
+        # Create the REST API tool configuration
+        tool_config = create_rest_api_tool(
+            name=name,
+            description=description,
+            base_url=base_url,
+            endpoint=endpoint,
+            method=method,
+            auth_type=auth_type,
+            auth_token=auth_token,
+            path_params=path_params_dict,
+            query_params=query_params_dict,
+            body_params=body_params_dict
+        )
+        
+        # Create the tool using ElevenLabs API
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_config
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        return TextContent(
+            type="text",
+            text=f"API integration tool created successfully: Tool ID: {result.get('id')}, Name: {name}, URL: {base_url}{endpoint}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create API integration tool: {str(e)}")
+
+
+@mcp.tool(
+    description="""Create a CRM integration tool for popular platforms.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        crm_platform: CRM platform ("salesforce", "hubspot")
+        webhook_url: CRM webhook endpoint URL
+        auth_token: Authentication token for the CRM
+    """
+)
+def create_crm_integration_tool(
+    crm_platform: str,
+    webhook_url: str,
+    auth_token: str | None = None,
+) -> TextContent:
+    try:
+        # Create the CRM tool configuration
+        tool_config = create_crm_webhook_tool(crm_platform, webhook_url, auth_token)
+        
+        # Create the tool using ElevenLabs API
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_config
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        tool_name = tool_config["tool_config"]["name"]
+        
+        return TextContent(
+            type="text",
+            text=f"CRM integration tool created successfully: Tool ID: {result.get('id')}, Platform: {crm_platform}, Name: {tool_name}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create CRM integration tool: {str(e)}")
+
+
+@mcp.tool(
+    description="""Create a notification tool for messaging platforms.
+
+    ⚠️ COST WARNING: This tool makes an API call to ElevenLabs which may incur costs. Only use when explicitly requested by the user.
+
+    Args:
+        service: Notification service ("slack", "discord")
+        webhook_url: Service webhook URL
+        auth_token: Authentication token if required
+    """
+)
+def create_notification_tool_integration(
+    service: str,
+    webhook_url: str,
+    auth_token: str | None = None,
+) -> TextContent:
+    try:
+        # Create the notification tool configuration
+        tool_config = create_notification_tool(service, webhook_url, auth_token)
+        
+        # Extract the webhook config from tool_config wrapper
+        webhook_config = tool_config["tool_config"]["webhook"]
+        name = tool_config["tool_config"]["name"]
+        description = tool_config["tool_config"]["description"]
+        
+        # Create the tool using ElevenLabs API with proper structure
+        tool_data = {
+            "type": "server",
+            "name": name,
+            "description": description,
+            "webhook": webhook_config
+        }
+        
+        response = custom_client.post(
+            "https://api.elevenlabs.io/v1/convai/tools",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=tool_data
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        tool_name = tool_config["tool_config"]["name"]
+        
+        return TextContent(
+            type="text",
+            text=f"Notification tool created successfully: Tool ID: {result.get('id')}, Service: {service}, Name: {tool_name}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to create notification tool: {str(e)}")
+
+
+@mcp.tool(
+    description="""Generate a curl command equivalent for testing a tool configuration.
+
+    Args:
+        tool_id: The ID of the tool to generate curl command for
+        parameter_values: Parameter values as JSON string
+    """
+)
+def generate_curl_test_command(
+    tool_id: str,
+    parameter_values: str,
+) -> TextContent:
+    try:
+        import json
+        
+        # Get tool configuration
+        response = custom_client.get(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}",
+            headers={"xi-api-key": api_key}
+        )
+        response.raise_for_status()
+        tool_data = response.json()
+        
+        # Parse parameter values
+        params = json.loads(parameter_values)
+        
+        # Generate curl command
+        curl_command = generate_curl_command({"tool_config": tool_data.get("tool_config", {})}, params)
+        
+        return TextContent(
+            type="text",
+            text=f"Curl command for tool {tool_id}:\n\n{curl_command}",
+        )
+    except Exception as e:
+        return make_error(f"Failed to generate curl command: {str(e)}")
+
+
+@mcp.tool(
+    description="""Validate a tool configuration for errors and best practices.
+
+    Args:
+        tool_id: The ID of the tool to validate
+    """
+)
+def validate_tool_configuration(tool_id: str) -> TextContent:
+    try:
+        # Get tool configuration
+        response = custom_client.get(
+            f"https://api.elevenlabs.io/v1/convai/tools/{tool_id}",
+            headers={"xi-api-key": api_key}
+        )
+        response.raise_for_status()
+        tool_data = response.json()
+        
+        # Validate configuration
+        errors = validate_tool_config({"tool_config": tool_data.get("tool_config", {})})
+        
+        if not errors:
+            return TextContent(
+                type="text",
+                text=f"Tool {tool_id} configuration is valid and follows best practices.",
+            )
+        else:
+            error_list = "\n".join(f"- {error}" for error in errors)
+            return TextContent(
+                type="text",
+                text=f"Tool {tool_id} configuration has the following issues:\n{error_list}",
+            )
+    except Exception as e:
+        return make_error(f"Failed to validate tool configuration: {str(e)}")
+
+
+@mcp.tool(
+    description="""List available tool templates for common integrations.
+
+    Returns information about predefined tool templates that can be created.
+    """
+)
+def list_tool_templates() -> TextContent:
+    template_info = []
+    for category, info in TOOL_TEMPLATES.items():
+        variants = ", ".join(info["variants"].keys())
+        template_info.append(f"{category}: {info['description']} (variants: {variants})")
+    
+    formatted_templates = "\n".join(template_info)
+    return TextContent(
+        type="text",
+        text=f"Available tool templates:\n{formatted_templates}",
     )
 
 

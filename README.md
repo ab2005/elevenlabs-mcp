@@ -47,7 +47,7 @@ That's it. Your MCP client can now interact with ElevenLabs Conversational AI th
 
 ## Available Tools
 
-This MCP server provides 29 specialized tools for ElevenLabs Conversational AI:
+This MCP server provides 37+ specialized tools for ElevenLabs Conversational AI:
 
 ### Agent Management
 - `create_agent` - Create conversational AI agents with custom configurations
@@ -73,6 +73,16 @@ This MCP server provides 29 specialized tools for ElevenLabs Conversational AI:
 - `delete_tool` - Remove tools
 - `list_tools` - List available tools
 
+### curl-based Tool Creation (NEW!)
+- `create_weather_integration_tool` - One-click weather API integration (Open-Meteo, OpenWeatherMap)
+- `create_custom_webhook_tool` - Create webhook tools for any HTTP endpoint
+- `create_api_integration_tool` - Create REST API tools with authentication
+- `create_crm_integration_tool` - Quick CRM integrations (Salesforce, HubSpot)
+- `create_notification_tool_integration` - Messaging tools (Slack, Discord)
+- `generate_curl_test_command` - Generate curl commands for testing
+- `validate_tool_configuration` - Validate tool configurations
+- `list_tool_templates` - Show available integration templates
+
 ### Phone Integration
 - `create_phone_number` - Set up phone numbers for agents
 - `get_phone_number` - Get phone number details
@@ -97,8 +107,17 @@ Try asking Claude:
 - "Create an AI agent that can help customers with technical support inquiries"
 - "Set up a knowledge base for my agent with product documentation and FAQs"
 - "Configure a phone number for my agent to handle inbound calls"
-- "Create a custom tool that lets my agent check order status in our database"
+- "Create a weather integration tool for my agent"
+- "Set up a Slack notification tool so my agent can send messages to our team"
+- "Create a custom webhook tool that connects to our order management API"
+- "Generate a curl command to test my API integration"
 - "Get the widget code to embed my agent on our company website"
+
+## curl-based Tools Documentation
+
+For detailed guidance on creating HTTP-based integrations, see:
+- **[curl Tools Guide](docs/curl-tools-guide.md)** - Comprehensive documentation for creating server tools
+- **[Examples](examples/curl_tools_examples.py)** - Working code examples for common integrations
 
 ## Optional features
 
