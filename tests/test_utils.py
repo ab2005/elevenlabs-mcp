@@ -87,3 +87,14 @@ def test_handle_input_file():
 
         with pytest.raises(ElevenLabsMcpError):
             handle_input_file(str(temp_path / "nonexistent.mp3"))
+
+def test_handle_input_file_non_audio_error():
+    """Ensure non-audio files raise an error when audio_content_check is True."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        text_file = temp_path / "test.txt"
+        text_file.write_text("dummy text")
+
+        with pytest.raises(ElevenLabsMcpError):
+            handle_input_file(str(text_file), audio_content_check=True)
+
